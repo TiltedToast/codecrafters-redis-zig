@@ -1,12 +1,43 @@
 const std = @import("std");
 const net = std.net;
+const Reader = std.io.Reader;
+
+var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+const allocator = gpa.allocator();
+// zig fmt: off
+
+/// See [Redis Protocol](https://redis.io/docs/latest/develop/reference/protocol-spec/#simple-strings)
+const DATA_TYPE = enum {
+    simple_string,
+    simple_errors,
+    integers,
+    bulk_strings,
+    arrays,
+    nulls,
+    booleans,
+    doubles,
+    big_numbers,
+    bulk_errors,
+    verbatim_strings,
+    maps,
+    sets,
+    pushes
+};
+
+// zig fmt: on
+
+// pub fn encode_resp(reader: Reader) []u8 {
+//     const chunks = std.mem.split(u8, message, "\r\n");
+//     var resp = std.ArrayList(u8).init(allocator);
+//     _ = resp; // autofix
+
+//     for (chunks) |chunk| {
+//         std.debug.print("chunk: {s}\n", .{chunk});
+//     }
+// }
 
 pub fn main() !void {
     const stdout = std.io.getStdOut().writer();
-
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
 
     const address = try net.Address.resolveIp("127.0.0.1", 6379);
 
@@ -22,19 +53,28 @@ pub fn main() !void {
         defer conn.stream.close();
 
         const writer = conn.stream.writer();
+        const reader = conn.stream.reader();
 
         try stdout.print("accepted new connection from {}\n", .{conn.address});
 
-        const message = conn.stream.reader().readUntilDelimiterAlloc(allocator, '\n', 1024) catch |err| {
+        const message = try allocator.alloc(u8, 1024);
+        defer allocator.free(message);
+
+        const len = reader.read(message) catch |err| {
             try stdout.print("error reading message: {}\n", .{err});
             continue;
         };
-        defer allocator.free(message);
 
-        try stdout.print("received message: {s}\n", .{message});
+        try stdout.print("received message: {s}\n", .{message[0..len]});
 
-        if (std.mem.startsWith(u8, message, "PING")) {
-            _ = try writer.write("+PONG\r\n");
+        if (std.mem.startsWith(u8, message[0..len], "PING")) {
+            if (len == "PING".len + 2) {
+                _ = try writer.write("+PONG\r\n");
+            } else {
+                _ = try writer.write(message["PING".len + 1 .. len]);
+            }
+        } else {
+            _ = try writer.write("UNKNOWN COMMAND, GO AWAY I DON'T WANT YOU HERE\r\n");
         }
     }
 }
