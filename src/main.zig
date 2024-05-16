@@ -67,14 +67,6 @@ pub fn main() !void {
 
         try stdout.print("received message: {s}\n", .{message[0..len]});
 
-        if (std.mem.startsWith(u8, message[0..len], "PING")) {
-            if (len == "PING".len + 2) {
-                _ = try writer.write("+PONG\r\n");
-            } else {
-                _ = try writer.write(message["PING".len + 1 .. len]);
-            }
-        } else {
-            _ = try writer.write("UNKNOWN COMMAND, GO AWAY I DON'T WANT YOU HERE\r\n");
-        }
+        _ = try writer.write("+PONG\r\n");
     }
 }
